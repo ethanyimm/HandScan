@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HandScan 2D:4D Measurement</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <h1>HandScan 2D:4D</h1>
+        <p>
+          Measure index (2D) and ring (4D) finger lengths from a single photo
+          using a coin reference. Upload one image, detect the coin, mark the
+          base creases and tips, and get the ratio.
+        </p>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="controls">
+          <label class="file-input">
+            <span>Upload hand photo</span>
+            <input type="file" id="imageInput" accept="image/*" />
+          </label>
+
+          <div class="control-row">
+            <label>
+              Coin type
+              <select id="coinType">
+                <option value="quarter">US Quarter (24.26 mm)</option>
+                <option value="nickel">US Nickel (21.21 mm)</option>
+                <option value="dime">US Dime (17.91 mm)</option>
+                <option value="penny">US Penny (19.05 mm)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            <label>
+              Diameter (mm)
+              <input id="coinDiameter" type="number" step="0.01" min="1" />
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="detectCoinBtn">Detect coin</button>
+            <button id="manualCoinBtn">Manual coin</button>
+            <button id="autoLandmarksBtn">Auto-detect landmarks</button>
+            <button id="manualLandmarksBtn">Manual landmarks</button>
+            <button id="clearLandmarksBtn">Clear landmarks</button>
+          </div>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="imageCanvas" aria-label="Hand photo canvas"></canvas>
+          <div class="canvas-overlay" id="canvasHint">
+            Upload a photo to begin.
+          </div>
+        </div>
+
+        <p class="status" id="status">Waiting for image.</p>
+      </section>
+
+      <section class="panel results">
+        <h2>Measurements</h2>
+        <div class="result-row">
+          <span>2D length</span>
+          <strong id="length2d">—</strong>
+        </div>
+        <div class="result-row">
+          <span>4D length</span>
+          <strong id="length4d">—</strong>
+        </div>
+        <div class="result-row">
+          <span>2D:4D ratio</span>
+          <strong id="ratio">—</strong>
+        </div>
+        <div class="result-row">
+          <span>Confidence</span>
+          <strong id="confidence">—</strong>
+        </div>
+
+        <div class="notes">
+          <h3>Capture checklist</h3>
+          <ul>
+            <li>Hand flat, palm up, fingers relaxed and straight.</li>
+            <li>Coin on the same plane as the palm.</li>
+            <li>Base creases are the finger roots (Jupiter/Apollo curves).</li>
+          </ul>
+          <p>
+            Auto landmarks require a custom model. Manual landmarks are
+            supported for calibration and validation.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Prototype measurement UI. For research-grade accuracy, use a trained landmark model.</p>
+    </footer>
+
+    <script src="https://docs.opencv.org/4.10.0/opencv.js"></script>
+    <script src="custom_model_stub.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
