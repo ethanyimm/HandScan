@@ -15,18 +15,6 @@ const LANDMARK_ORDER = [
   { key: "ringTip", label: "Ring tip" },
 ];
 
-const CLOUD_REQUIRED_KEYS = LANDMARK_ORDER.map((item) => item.key);
-const CLOUD_KEY_ALIASES = {
-  indexbase: "indexBase",
-  index_base: "indexBase",
-  index_base_crease: "indexBase",
-  index_tip: "indexTip",
-  ringbase: "ringBase",
-  ring_base: "ringBase",
-  ring_base_crease: "ringBase",
-  ring_tip: "ringTip",
-};
-
 const MAX_CANVAS_DIMENSION = 1200;
 
 const state = {
@@ -38,6 +26,7 @@ const state = {
   manualQueue: [],
   manualCoinStep: null,
   proxyOffset: 0.15,
+  autoRunProxy: true,
   coin: {
     center: null,
     radiusPx: null,
@@ -65,13 +54,11 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.detectCoinBtn = document.getElementById("detectCoinBtn");
   elements.manualCoinBtn = document.getElementById("manualCoinBtn");
   elements.autoLandmarksBtn = document.getElementById("autoLandmarksBtn");
-  elements.cloudLandmarksBtn = document.getElementById("cloudLandmarksBtn");
   elements.proxyLandmarksBtn = document.getElementById("proxyLandmarksBtn");
   elements.manualLandmarksBtn = document.getElementById("manualLandmarksBtn");
   elements.clearLandmarksBtn = document.getElementById("clearLandmarksBtn");
-  elements.cloudEndpoint = document.getElementById("cloudEndpoint");
-  elements.cloudApiKey = document.getElementById("cloudApiKey");
   elements.creaseOffset = document.getElementById("creaseOffset");
+  elements.autoRunProxy = document.getElementById("autoRunProxy");
   elements.length2d = document.getElementById("length2d");
   elements.length4d = document.getElementById("length4d");
   elements.ratio = document.getElementById("ratio");
@@ -84,7 +71,6 @@ document.addEventListener("DOMContentLoaded", () => {
   state.ctx = elements.canvas.getContext("2d");
 
   initCoinControls();
-  initCloudControls();
   initProxyControls();
   bindEvents();
   attachOpenCv();
@@ -96,13 +82,10 @@ function initCoinControls() {
   updateCoinDiameterForType();
 }
 
-function initCloudControls() {
-  elements.cloudEndpoint.value = "";
-  elements.cloudApiKey.value = "";
-}
-
 function initProxyControls() {
   elements.creaseOffset.value = "15";
+  elements.autoRunProxy.checked = true;
+  state.autoRunProxy = true;
   updateProxyOffset();
 }
 
@@ -113,11 +96,11 @@ function bindEvents() {
   elements.detectCoinBtn.addEventListener("click", detectCoin);
   elements.manualCoinBtn.addEventListener("click", startManualCoin);
   elements.autoLandmarksBtn.addEventListener("click", autoDetectLandmarks);
-  elements.cloudLandmarksBtn.addEventListener("click", runCloudLandmarks);
   elements.proxyLandmarksBtn.addEventListener("click", runProxyLandmarks);
   elements.manualLandmarksBtn.addEventListener("click", startManualLandmarks);
   elements.clearLandmarksBtn.addEventListener("click", clearLandmarks);
   elements.creaseOffset.addEventListener("input", updateProxyOffset);
+  elements.autoRunProxy.addEventListener("change", updateAutoRunProxy);
   elements.canvas.addEventListener("click", handleCanvasClick);
 }
 
@@ -147,6 +130,9 @@ function handleImageUpload(event) {
       drawImageToCanvas(image);
       setStatus("Image loaded. Detect the coin or mark it manually.");
       elements.canvasHint.style.display = "none";
+      if (state.autoRunProxy) {
+        runProxyLandmarks();
+      }
     };
     image.src = loadEvent.target.result;
   };
@@ -209,6 +195,10 @@ function updateProxyOffset() {
     return;
   }
   state.proxyOffset = clamp(rawValue / 100, 0, 0.3);
+}
+
+function updateAutoRunProxy() {
+  state.autoRunProxy = Boolean(elements.autoRunProxy.checked);
 }
 
 function startManualCoin() {
@@ -309,9 +299,8 @@ async function autoDetectLandmarks() {
     return;
   }
   if (typeof window.detectFingerLandmarks !== "function") {
-    setStatus(
-      "Custom model not loaded. Implement detectFingerLandmarks in custom_model_stub.js."
-    );
+    setStatus("Custom model not loaded. Using proxy landmarks instead.");
+    await runProxyLandmarks();
     return;
   }
   setStatus("Running custom landmark model...");
@@ -341,68 +330,6 @@ async function autoDetectLandmarks() {
     console.error(error);
     setStatus("Model inference failed.");
   }
-  renderOverlay();
-  updateOutputs();
-}
-
-async function runCloudLandmarks() {
-  if (!state.image) {
-    setStatus("Upload an image first.");
-    return;
-  }
-  const endpoint = elements.cloudEndpoint.value.trim();
-  if (!endpoint) {
-    setStatus("Enter a cloud endpoint first.");
-    return;
-  }
-  const apiKey = elements.cloudApiKey.value.trim();
-  const url = buildRoboflowUrl(endpoint, apiKey);
-  if (!url) {
-    setStatus("Cloud endpoint is invalid.");
-    return;
-  }
-
-  elements.cloudLandmarksBtn.disabled = true;
-  setStatus("Sending image to cloud model...");
-
-  try {
-    const blob = await canvasToBlob(elements.canvas);
-    if (!blob) {
-      setStatus("Failed to encode the image.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", blob, "hand.jpg");
-
-    const response = await fetch(url, {
-      method: "POST",
-      body: formData,
-    });
-    if (!response.ok) {
-      setStatus(`Cloud request failed (${response.status}).`);
-      return;
-    }
-
-    const payload = await response.json();
-    const parsed = parseCloudResponse(payload);
-    if (!parsed) {
-      setStatus("Cloud response missing required keypoints.");
-      return;
-    }
-
-    state.landmarks = {
-      ...parsed.points,
-      confidence: parsed.confidence,
-      source: "cloud",
-    };
-    setStatus("Cloud landmarks detected.");
-  } catch (error) {
-    console.error(error);
-    setStatus("Cloud inference failed.");
-  } finally {
-    elements.cloudLandmarksBtn.disabled = false;
-  }
-
   renderOverlay();
   updateOutputs();
 }
@@ -586,145 +513,6 @@ function interpolate(from, to, t) {
     x: from.x + (to.x - from.x) * t,
     y: from.y + (to.y - from.y) * t,
   };
-}
-
-function buildRoboflowUrl(endpoint, apiKey) {
-  let url = endpoint;
-  if (!/^https?:\/\//i.test(url)) {
-    url = `https://detect.roboflow.com/${url.replace(/^\/+/, "")}`;
-  }
-  if (apiKey && !url.includes("api_key=")) {
-    url += url.includes("?") ? "&" : "?";
-    url += `api_key=${encodeURIComponent(apiKey)}`;
-  }
-  return url;
-}
-
-function canvasToBlob(canvas) {
-  return new Promise((resolve) => {
-    canvas.toBlob(
-      (blob) => resolve(blob),
-      "image/jpeg",
-      0.92
-    );
-  });
-}
-
-function parseCloudResponse(payload) {
-  if (!payload || !Array.isArray(payload.predictions)) {
-    return null;
-  }
-  if (payload.predictions.length === 0) {
-    return null;
-  }
-  const best = payload.predictions.reduce((current, candidate) => {
-    if (!current) {
-      return candidate;
-    }
-    const currentScore = current.confidence ?? 0;
-    const nextScore = candidate.confidence ?? 0;
-    return nextScore > currentScore ? candidate : current;
-  }, null);
-
-  const rawKeypoints =
-    best.keypoints || best.keypoint || payload.keypoints || null;
-  if (!rawKeypoints) {
-    return null;
-  }
-
-  const points = {};
-  const confidences = [];
-
-  if (Array.isArray(rawKeypoints)) {
-    rawKeypoints.forEach((entry) => {
-      if (!entry) {
-        return;
-      }
-      const name = entry.name || entry.class || entry.label || entry.part;
-      if (!name) {
-        return;
-      }
-      const key = mapKeypointName(name);
-      if (!isRequiredKey(key)) {
-        return;
-      }
-      const { x, y, confidence } = parseKeypointValue(entry);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return;
-      }
-      points[key] = { x, y };
-      if (Number.isFinite(confidence)) {
-        confidences.push(confidence);
-      }
-    });
-  } else if (typeof rawKeypoints === "object") {
-    Object.entries(rawKeypoints).forEach(([name, value]) => {
-      const key = mapKeypointName(name);
-      if (!isRequiredKey(key)) {
-        return;
-      }
-      const { x, y, confidence } = parseKeypointValue(value);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return;
-      }
-      points[key] = { x, y };
-      if (Number.isFinite(confidence)) {
-        confidences.push(confidence);
-      }
-    });
-  }
-
-  if (!areLandmarksValid(points)) {
-    return null;
-  }
-
-  const fallbackConfidence = clamp(best.confidence ?? 0.6, 0, 1);
-  const confidence =
-    confidences.length > 0 ? average(confidences) : fallbackConfidence;
-
-  return { points, confidence };
-}
-
-function parseKeypointValue(value) {
-  if (Array.isArray(value)) {
-    return {
-      x: value[0],
-      y: value[1],
-      confidence: value[2],
-    };
-  }
-  if (value && typeof value === "object") {
-    return {
-      x: value.x ?? value[0],
-      y: value.y ?? value[1],
-      confidence: value.confidence ?? value.score ?? value[2],
-    };
-  }
-  return { x: null, y: null, confidence: null };
-}
-
-function mapKeypointName(name) {
-  const normalized = normalizeKeypointName(name);
-  if (CLOUD_KEY_ALIASES[normalized]) {
-    return CLOUD_KEY_ALIASES[normalized];
-  }
-  const match = CLOUD_REQUIRED_KEYS.find(
-    (key) => normalizeKeypointName(key) === normalized
-  );
-  return match || name;
-}
-
-function normalizeKeypointName(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, "_");
-}
-
-function isRequiredKey(key) {
-  return CLOUD_REQUIRED_KEYS.includes(key);
-}
-
-function average(values) {
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return total / values.length;
 }
 
 function circleEdgeCoverage(edgeMat, x, y, r) {

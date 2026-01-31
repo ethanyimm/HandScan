@@ -46,29 +46,6 @@
 
           <div class="control-row">
             <label>
-              Cloud endpoint
-              <input
-                id="cloudEndpoint"
-                type="text"
-                placeholder="https://detect.roboflow.com/handscan/1"
-              />
-            </label>
-            <label>
-              API key
-              <input
-                id="cloudApiKey"
-                type="password"
-                placeholder="rf_..."
-              />
-            </label>
-          </div>
-          <p class="hint">
-            Hosted models (e.g., Roboflow) should return keypoints named
-            indexBase, indexTip, ringBase, ringTip.
-          </p>
-
-          <div class="control-row">
-            <label>
               Crease offset toward wrist (%)
               <input
                 id="creaseOffset"
@@ -77,6 +54,10 @@
                 max="30"
                 step="1"
               />
+            </label>
+            <label class="checkbox">
+              <input id="autoRunProxy" type="checkbox" checked />
+              Auto-run proxy landmarks on upload
             </label>
           </div>
           <p class="hint">
@@ -88,7 +69,6 @@
             <button id="detectCoinBtn">Detect coin</button>
             <button id="manualCoinBtn">Manual coin</button>
             <button id="autoLandmarksBtn">Auto-detect landmarks</button>
-            <button id="cloudLandmarksBtn">Cloud landmarks</button>
             <button id="proxyLandmarksBtn">Proxy landmarks</button>
             <button id="manualLandmarksBtn">Manual landmarks</button>
             <button id="clearLandmarksBtn">Clear landmarks</button>
@@ -132,9 +112,10 @@
             <li>Base creases are the finger roots (Jupiter/Apollo curves).</li>
           </ul>
           <p>
-            Auto landmarks require a custom model. Proxy landmarks estimate
-            creases from joint positions. Manual landmarks are supported for
-            calibration and validation.
+            Auto landmarks require a custom model. If unavailable, the app
+            falls back to proxy landmarks that estimate creases from joint
+            positions. Manual landmarks are supported for calibration and
+            validation.
           </p>
         </div>
       </section>
