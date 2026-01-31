@@ -26,6 +26,7 @@ const state = {
   manualQueue: [],
   manualCoinStep: null,
   proxyOffset: 0.15,
+  tipOffset: 0.05,
   autoRunProxy: true,
   coin: {
     center: null,
@@ -59,6 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.manualLandmarksBtn = document.getElementById("manualLandmarksBtn");
   elements.clearLandmarksBtn = document.getElementById("clearLandmarksBtn");
   elements.creaseOffset = document.getElementById("creaseOffset");
+  elements.tipOffset = document.getElementById("tipOffset");
   elements.autoRunProxy = document.getElementById("autoRunProxy");
   elements.length2d = document.getElementById("length2d");
   elements.length4d = document.getElementById("length4d");
@@ -84,10 +86,12 @@ function initCoinControls() {
 }
 
 function initProxyControls() {
-  elements.creaseOffset.value = "-5";
+  elements.creaseOffset.value = "-15";
+  elements.tipOffset.value = "5";
   elements.autoRunProxy.checked = true;
   state.autoRunProxy = true;
   updateProxyOffset();
+  updateTipOffset();
 }
 
 function bindEvents() {
@@ -101,6 +105,7 @@ function bindEvents() {
   elements.manualLandmarksBtn.addEventListener("click", startManualLandmarks);
   elements.clearLandmarksBtn.addEventListener("click", clearLandmarks);
   elements.creaseOffset.addEventListener("input", updateProxyOffset);
+  elements.tipOffset.addEventListener("input", updateTipOffset);
   elements.autoRunProxy.addEventListener("change", updateAutoRunProxy);
   elements.canvas.addEventListener("click", handleCanvasClick);
 }
@@ -198,6 +203,14 @@ function updateProxyOffset() {
   state.proxyOffset = clamp(rawValue / 100, -0.3, 0.45);
 }
 
+function updateTipOffset() {
+  const rawValue = Number.parseFloat(elements.tipOffset.value);
+  if (!Number.isFinite(rawValue)) {
+    state.tipOffset = 0;
+    return;
+  }
+  state.tipOffset = clamp(rawValue / 100, -0.2, 0.2);
+}
 function updateAutoRunProxy() {
   state.autoRunProxy = Boolean(elements.autoRunProxy.checked);
 }
@@ -517,9 +530,9 @@ function proxyLandmarksFromMediapipe(results) {
 
   const wrist = toPoint(landmarks[0], width, height);
   const indexMcp = toPoint(landmarks[5], width, height);
-  const indexTip = toPoint(landmarks[8], width, height);
+  let indexTip = toPoint(landmarks[8], width, height);
   const ringMcp = toPoint(landmarks[13], width, height);
-  const ringTip = toPoint(landmarks[16], width, height);
+  let ringTip = toPoint(landmarks[16], width, height);
 
   if (!wrist || !indexMcp || !indexTip || !ringMcp || !ringTip) {
     return null;
@@ -528,6 +541,9 @@ function proxyLandmarksFromMediapipe(results) {
   const offset = clamp(state.proxyOffset ?? 0, -0.3, 0.45);
   const indexBase = interpolate(indexMcp, wrist, offset);
   const ringBase = interpolate(ringMcp, wrist, offset);
+  const tipOffset = clamp(state.tipOffset ?? 0, -0.2, 0.2);
+  indexTip = applyTipOffset(indexTip, indexMcp, tipOffset);
+  ringTip = applyTipOffset(ringTip, ringMcp, tipOffset);
 
   return {
     indexBase,
@@ -552,6 +568,36 @@ function interpolate(from, to, t) {
     x: from.x + (to.x - from.x) * t,
     y: from.y + (to.y - from.y) * t,
   };
+}
+
+function applyTipOffset(tip, mcp, offset) {
+  if (!tip || !mcp || offset === 0) {
+    return tip;
+  }
+  const direction = normalizeVector(subtract(tip, mcp));
+  if (!direction) {
+    return tip;
+  }
+  const length = distance(tip, mcp);
+  return {
+    x: tip.x + direction.x * length * offset,
+    y: tip.y + direction.y * length * offset,
+  };
+}
+
+function normalizeVector(vector) {
+  if (!vector) {
+    return null;
+  }
+  const length = Math.hypot(vector.x, vector.y);
+  if (length < 1e-6) {
+    return null;
+  }
+  return { x: vector.x / length, y: vector.y / length };
+}
+
+function subtract(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y };
 }
 
 function circleEdgeCoverage(edgeMat, x, y, r) {
