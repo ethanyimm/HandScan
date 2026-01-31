@@ -55,14 +55,25 @@
                 step="1"
               />
             </label>
+            <label>
+              Tip extension (% of finger length)
+              <input
+                id="tipOffset"
+                type="number"
+                min="-20"
+                max="20"
+                step="1"
+              />
+            </label>
             <label class="checkbox">
               <input id="autoRunProxy" type="checkbox" checked />
               Auto-run proxy landmarks on upload
             </label>
           </div>
           <p class="hint">
-            Proxy mode uses MCP joints. Negative offsets move toward the
-            fingertip (higher), positive offsets move toward the wrist (lower).
+            Crease offset shifts base points from the MCP joint (negative moves
+            toward fingertip, positive toward wrist). Tip extension adjusts the
+            fingertip outward (positive) or inward (negative).
           </p>
 
           <div class="button-row">
