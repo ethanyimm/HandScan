@@ -86,7 +86,7 @@ function initCoinControls() {
 }
 
 function initProxyControls() {
-  elements.creaseOffset.value = "15";
+  elements.creaseOffset.value = "22";
   elements.autoRunProxy.checked = true;
   elements.refineCrease.checked = true;
   state.autoRunProxy = true;
@@ -200,7 +200,7 @@ function updateProxyOffset() {
     state.proxyOffset = 0.15;
     return;
   }
-  state.proxyOffset = clamp(rawValue / 100, 0, 0.3);
+  state.proxyOffset = clamp(rawValue / 100, 0, 0.45);
 }
 
 function updateAutoRunProxy() {
@@ -580,9 +580,8 @@ function toPoint(landmark, width, height) {
 }
 
 function refineCreasePoint(base, mcp, tip, wrist, imageData) {
-  const fingerDir = normalizeVector(subtract(tip, mcp));
   const palmDir = normalizeVector(subtract(wrist, mcp));
-  if (!fingerDir || !palmDir) {
+  if (!palmDir) {
     return base;
   }
 
@@ -592,24 +591,28 @@ function refineCreasePoint(base, mcp, tip, wrist, imageData) {
   }
 
   const t0 = Math.min(
-    0.35,
-    Math.max(0.02, distance(mcp, base) / lineLength)
+    0.4,
+    Math.max(0.05, distance(mcp, base) / lineLength)
   );
-  const searchRange = 0.08;
+  const tMin = 0.06;
+  const tMax = 0.4;
+  const searchRange = 0.2;
   const step = 0.01;
   let bestPoint = base;
   let bestScore = -Infinity;
 
   for (
-    let t = Math.max(0.02, t0 - searchRange);
-    t <= Math.min(0.35, t0 + searchRange);
+    let t = Math.max(tMin, t0 - searchRange);
+    t <= Math.min(tMax, t0 + searchRange);
     t += step
   ) {
     const candidate = {
       x: mcp.x + palmDir.x * lineLength * t,
       y: mcp.y + palmDir.y * lineLength * t,
     };
-    const score = creaseEdgeScore(candidate, fingerDir, imageData, lineLength);
+    const score =
+      creaseEdgeScore(candidate, palmDir, imageData, lineLength) *
+      (1 - (t - tMin) / (tMax - tMin) * 0.15);
     if (score > bestScore) {
       bestScore = score;
       bestPoint = candidate;
@@ -619,25 +622,27 @@ function refineCreasePoint(base, mcp, tip, wrist, imageData) {
   return bestPoint;
 }
 
-function creaseEdgeScore(point, fingerDir, imageData, lineLength) {
-  const perp = { x: -fingerDir.y, y: fingerDir.x };
-  const base = clamp(lineLength * 0.04, 4, 18);
-  const offsets = [base, base * 1.6, base * 2.2];
+function creaseEdgeScore(point, palmDir, imageData, lineLength) {
+  const base = clamp(lineLength * 0.015, 2, 10);
+  const offsets = [base, base * 2, base * 3];
   let score = 0;
 
   offsets.forEach((offset) => {
     const a = sampleGray(
       imageData,
-      point.x + perp.x * offset,
-      point.y + perp.y * offset
+      point.x + palmDir.x * offset,
+      point.y + palmDir.y * offset
     );
     const b = sampleGray(
       imageData,
-      point.x - perp.x * offset,
-      point.y - perp.y * offset
+      point.x - palmDir.x * offset,
+      point.y - palmDir.y * offset
     );
     score += Math.abs(a - b);
   });
+
+  const center = sampleGray(imageData, point.x, point.y);
+  score += (255 - center) * 0.05;
 
   return score;
 }
