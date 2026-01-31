@@ -55,6 +55,10 @@
                 step="1"
               />
             </label>
+            <label class="checkbox">
+              <input id="autoRunProxy" type="checkbox" checked />
+              Auto-run proxy landmarks on upload
+            </label>
           </div>
           <p class="hint">
             Proxy mode uses MCP joints and offsets toward the wrist. Increase if
@@ -108,9 +112,10 @@
             <li>Base creases are the finger roots (Jupiter/Apollo curves).</li>
           </ul>
           <p>
-            Auto landmarks require a custom model. Proxy landmarks estimate
-            creases from joint positions. Manual landmarks are supported for
-            calibration and validation.
+            Auto landmarks require a custom model. If unavailable, the app
+            falls back to proxy landmarks that estimate creases from joint
+            positions. Manual landmarks are supported for calibration and
+            validation.
           </p>
         </div>
       </section>

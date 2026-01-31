@@ -81,13 +81,25 @@ body {
   color: #3a3f50;
 }
 
-.control-row input,
+.control-row input:not([type="checkbox"]),
 .control-row select {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid #d2d6e0;
   background: #ffffff;
   font-size: 0.95rem;
+}
+
+.control-row input[type="checkbox"] {
+  margin: 0;
+  width: auto;
+  height: auto;
+}
+
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
 }
 
 .hint {

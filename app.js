@@ -26,6 +26,7 @@ const state = {
   manualQueue: [],
   manualCoinStep: null,
   proxyOffset: 0.15,
+  autoRunProxy: true,
   coin: {
     center: null,
     radiusPx: null,
@@ -57,6 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.manualLandmarksBtn = document.getElementById("manualLandmarksBtn");
   elements.clearLandmarksBtn = document.getElementById("clearLandmarksBtn");
   elements.creaseOffset = document.getElementById("creaseOffset");
+  elements.autoRunProxy = document.getElementById("autoRunProxy");
   elements.length2d = document.getElementById("length2d");
   elements.length4d = document.getElementById("length4d");
   elements.ratio = document.getElementById("ratio");
@@ -82,6 +84,8 @@ function initCoinControls() {
 
 function initProxyControls() {
   elements.creaseOffset.value = "15";
+  elements.autoRunProxy.checked = true;
+  state.autoRunProxy = true;
   updateProxyOffset();
 }
 
@@ -96,6 +100,7 @@ function bindEvents() {
   elements.manualLandmarksBtn.addEventListener("click", startManualLandmarks);
   elements.clearLandmarksBtn.addEventListener("click", clearLandmarks);
   elements.creaseOffset.addEventListener("input", updateProxyOffset);
+  elements.autoRunProxy.addEventListener("change", updateAutoRunProxy);
   elements.canvas.addEventListener("click", handleCanvasClick);
 }
 
@@ -125,6 +130,9 @@ function handleImageUpload(event) {
       drawImageToCanvas(image);
       setStatus("Image loaded. Detect the coin or mark it manually.");
       elements.canvasHint.style.display = "none";
+      if (state.autoRunProxy) {
+        runProxyLandmarks();
+      }
     };
     image.src = loadEvent.target.result;
   };
@@ -187,6 +195,10 @@ function updateProxyOffset() {
     return;
   }
   state.proxyOffset = clamp(rawValue / 100, 0, 0.3);
+}
+
+function updateAutoRunProxy() {
+  state.autoRunProxy = Boolean(elements.autoRunProxy.checked);
 }
 
 function startManualCoin() {
@@ -287,9 +299,8 @@ async function autoDetectLandmarks() {
     return;
   }
   if (typeof window.detectFingerLandmarks !== "function") {
-    setStatus(
-      "Custom model not loaded. Implement detectFingerLandmarks in custom_model_stub.js."
-    );
+    setStatus("Custom model not loaded. Using proxy landmarks instead.");
+    await runProxyLandmarks();
     return;
   }
   setStatus("Running custom landmark model...");
