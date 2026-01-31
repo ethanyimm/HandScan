@@ -37,6 +37,7 @@ const state = {
   mode: null,
   manualQueue: [],
   manualCoinStep: null,
+  proxyOffset: 0.15,
   coin: {
     center: null,
     radiusPx: null,
@@ -55,6 +56,7 @@ const state = {
 };
 
 const elements = {};
+let handposeModelPromise = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   elements.imageInput = document.getElementById("imageInput");
@@ -64,10 +66,12 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.manualCoinBtn = document.getElementById("manualCoinBtn");
   elements.autoLandmarksBtn = document.getElementById("autoLandmarksBtn");
   elements.cloudLandmarksBtn = document.getElementById("cloudLandmarksBtn");
+  elements.proxyLandmarksBtn = document.getElementById("proxyLandmarksBtn");
   elements.manualLandmarksBtn = document.getElementById("manualLandmarksBtn");
   elements.clearLandmarksBtn = document.getElementById("clearLandmarksBtn");
   elements.cloudEndpoint = document.getElementById("cloudEndpoint");
   elements.cloudApiKey = document.getElementById("cloudApiKey");
+  elements.creaseOffset = document.getElementById("creaseOffset");
   elements.length2d = document.getElementById("length2d");
   elements.length4d = document.getElementById("length4d");
   elements.ratio = document.getElementById("ratio");
@@ -81,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initCoinControls();
   initCloudControls();
+  initProxyControls();
   bindEvents();
   attachOpenCv();
   updateOutputs();
@@ -96,6 +101,11 @@ function initCloudControls() {
   elements.cloudApiKey.value = "";
 }
 
+function initProxyControls() {
+  elements.creaseOffset.value = "15";
+  updateProxyOffset();
+}
+
 function bindEvents() {
   elements.imageInput.addEventListener("change", handleImageUpload);
   elements.coinType.addEventListener("change", updateCoinDiameterForType);
@@ -104,8 +114,10 @@ function bindEvents() {
   elements.manualCoinBtn.addEventListener("click", startManualCoin);
   elements.autoLandmarksBtn.addEventListener("click", autoDetectLandmarks);
   elements.cloudLandmarksBtn.addEventListener("click", runCloudLandmarks);
+  elements.proxyLandmarksBtn.addEventListener("click", runProxyLandmarks);
   elements.manualLandmarksBtn.addEventListener("click", startManualLandmarks);
   elements.clearLandmarksBtn.addEventListener("click", clearLandmarks);
+  elements.creaseOffset.addEventListener("input", updateProxyOffset);
   elements.canvas.addEventListener("click", handleCanvasClick);
 }
 
@@ -188,6 +200,15 @@ function handleCoinDiameterInput() {
   }
   state.coin.diameterCm = mmValue / 10;
   updateOutputs();
+}
+
+function updateProxyOffset() {
+  const rawValue = Number.parseFloat(elements.creaseOffset.value);
+  if (!Number.isFinite(rawValue)) {
+    state.proxyOffset = 0.15;
+    return;
+  }
+  state.proxyOffset = clamp(rawValue / 100, 0, 0.3);
 }
 
 function startManualCoin() {
@@ -386,6 +407,62 @@ async function runCloudLandmarks() {
   updateOutputs();
 }
 
+async function runProxyLandmarks() {
+  if (!state.image) {
+    setStatus("Upload an image first.");
+    return;
+  }
+  if (typeof window.handpose === "undefined") {
+    setStatus("Handpose model is unavailable.");
+    return;
+  }
+
+  elements.proxyLandmarksBtn.disabled = true;
+  setStatus("Running proxy landmarks (joint-based)...");
+
+  try {
+    const model = await loadHandposeModel();
+    const predictions = await model.estimateHands(elements.canvas, {
+      flipHorizontal: false,
+    });
+
+    if (!predictions || predictions.length === 0) {
+      setStatus("No hand detected. Try a clearer photo.");
+      return;
+    }
+
+    const best = predictions.reduce((current, candidate) => {
+      if (!current) {
+        return candidate;
+      }
+      const currentScore = current.handInViewConfidence ?? 0;
+      const nextScore = candidate.handInViewConfidence ?? 0;
+      return nextScore > currentScore ? candidate : current;
+    }, null);
+
+    const points = proxyLandmarksFromHand(best.landmarks);
+    if (!points || !areLandmarksValid(points)) {
+      setStatus("Proxy landmarks incomplete.");
+      return;
+    }
+
+    state.landmarks = {
+      ...points,
+      confidence: clamp((best.handInViewConfidence ?? 0.6) * 0.5, 0, 1),
+      source: "proxy",
+    };
+    setStatus("Proxy landmarks set (approximate).");
+  } catch (error) {
+    console.error(error);
+    setStatus("Proxy landmark inference failed.");
+  } finally {
+    elements.proxyLandmarksBtn.disabled = false;
+  }
+
+  renderOverlay();
+  updateOutputs();
+}
+
 function detectCoin() {
   if (!state.image) {
     setStatus("Upload an image first.");
@@ -462,6 +539,53 @@ function detectCoin() {
   }
   renderOverlay();
   updateOutputs();
+}
+
+function loadHandposeModel() {
+  if (!handposeModelPromise) {
+    handposeModelPromise = window.handpose.load();
+  }
+  return handposeModelPromise;
+}
+
+function proxyLandmarksFromHand(landmarks) {
+  if (!Array.isArray(landmarks) || landmarks.length < 21) {
+    return null;
+  }
+  const wrist = toPoint(landmarks[0]);
+  const indexMcp = toPoint(landmarks[5]);
+  const indexTip = toPoint(landmarks[8]);
+  const ringMcp = toPoint(landmarks[13]);
+  const ringTip = toPoint(landmarks[16]);
+
+  if (!wrist || !indexMcp || !indexTip || !ringMcp || !ringTip) {
+    return null;
+  }
+
+  const offset = clamp(state.proxyOffset ?? 0.15, 0, 0.3);
+  const indexBase = interpolate(indexMcp, wrist, offset);
+  const ringBase = interpolate(ringMcp, wrist, offset);
+
+  return {
+    indexBase,
+    indexTip,
+    ringBase,
+    ringTip,
+  };
+}
+
+function toPoint(value) {
+  if (!Array.isArray(value) || value.length < 2) {
+    return null;
+  }
+  return { x: value[0], y: value[1] };
+}
+
+function interpolate(from, to, t) {
+  return {
+    x: from.x + (to.x - from.x) * t,
+    y: from.y + (to.y - from.y) * t,
+  };
 }
 
 function buildRoboflowUrl(endpoint, apiKey) {
