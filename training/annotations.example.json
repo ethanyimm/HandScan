@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "createdAt": "2026-01-31T00:00:00Z",
+  "order": ["indexBase", "indexTip", "ringBase", "ringTip"],
+  "items": [
+    {
+      "image": "example.jpg",
+      "width": 4032,
+      "height": 3024,
+      "landmarks": {
+        "indexBase": [123.4, 456.7],
+        "indexTip": [345.6, 210.1],
+        "ringBase": [512.3, 448.8],
+        "ringTip": [698.2, 194.4]
+      }
+    }
+  ]
+}
