@@ -67,11 +67,29 @@
             indexBase, indexTip, ringBase, ringTip.
           </p>
 
+          <div class="control-row">
+            <label>
+              Crease offset toward wrist (%)
+              <input
+                id="creaseOffset"
+                type="number"
+                min="0"
+                max="30"
+                step="1"
+              />
+            </label>
+          </div>
+          <p class="hint">
+            Proxy mode uses MCP joints and offsets toward the wrist. Increase if
+            the base crease lands too close to the knuckle.
+          </p>
+
           <div class="button-row">
             <button id="detectCoinBtn">Detect coin</button>
             <button id="manualCoinBtn">Manual coin</button>
             <button id="autoLandmarksBtn">Auto-detect landmarks</button>
             <button id="cloudLandmarksBtn">Cloud landmarks</button>
+            <button id="proxyLandmarksBtn">Proxy landmarks</button>
             <button id="manualLandmarksBtn">Manual landmarks</button>
             <button id="clearLandmarksBtn">Clear landmarks</button>
           </div>
@@ -114,8 +132,9 @@
             <li>Base creases are the finger roots (Jupiter/Apollo curves).</li>
           </ul>
           <p>
-            Auto landmarks require a custom model. Manual landmarks are
-            supported for calibration and validation.
+            Auto landmarks require a custom model. Proxy landmarks estimate
+            creases from joint positions. Manual landmarks are supported for
+            calibration and validation.
           </p>
         </div>
       </section>
@@ -128,6 +147,7 @@
 
     <script src="https://docs.opencv.org/4.10.0/opencv.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose@latest/dist/handpose.min.js"></script>
     <script src="custom_model_stub.js"></script>
     <script src="app.js"></script>
   </body>
