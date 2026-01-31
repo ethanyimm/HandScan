@@ -307,7 +307,8 @@ async function autoDetectLandmarks() {
   try {
     const result = await window.detectFingerLandmarks(elements.canvas);
     if (!result) {
-      setStatus("Model returned no landmarks.");
+      setStatus("Custom model returned no landmarks. Using proxy landmarks.");
+      await runProxyLandmarks();
       return;
     }
     const nextLandmarks = {
@@ -317,7 +318,8 @@ async function autoDetectLandmarks() {
       ringTip: result.ringTip,
     };
     if (!areLandmarksValid(nextLandmarks)) {
-      setStatus("Model landmarks incomplete or invalid.");
+      setStatus("Custom model landmarks invalid. Using proxy landmarks.");
+      await runProxyLandmarks();
       return;
     }
     state.landmarks = {
@@ -328,7 +330,8 @@ async function autoDetectLandmarks() {
     setStatus("Landmarks detected.");
   } catch (error) {
     console.error(error);
-    setStatus("Model inference failed.");
+    setStatus("Custom model failed. Using proxy landmarks.");
+    await runProxyLandmarks();
   }
   renderOverlay();
   updateOutputs();

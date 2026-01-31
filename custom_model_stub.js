@@ -3,7 +3,7 @@
 // TensorFlow.js landmark integration.
 // Update MODEL_SETTINGS to match your model's input/output specs.
 const MODEL_SETTINGS = {
-  modelUrl: "models/handscan/model.json",
+  modelUrl: "",
   modelType: "graph", // "graph" or "layers"
   inputSize: { width: 256, height: 256 },
   letterbox: true,
@@ -66,7 +66,9 @@ function ensureTensorFlow() {
 function validateSettings() {
   const { modelUrl, inputSize, output } = MODEL_SETTINGS;
   if (!modelUrl) {
-    throw new Error("MODEL_SETTINGS.modelUrl is required.");
+    const error = new Error("MODEL_URL_NOT_SET");
+    error.code = "MODEL_URL_NOT_SET";
+    throw error;
   }
   if (!inputSize || !inputSize.width || !inputSize.height) {
     throw new Error("MODEL_SETTINGS.inputSize must define width/height.");
