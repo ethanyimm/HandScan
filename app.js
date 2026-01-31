@@ -27,6 +27,7 @@ const state = {
   manualCoinStep: null,
   proxyOffset: 0.15,
   autoRunProxy: true,
+  refineCrease: true,
   coin: {
     center: null,
     radiusPx: null,
@@ -60,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.clearLandmarksBtn = document.getElementById("clearLandmarksBtn");
   elements.creaseOffset = document.getElementById("creaseOffset");
   elements.autoRunProxy = document.getElementById("autoRunProxy");
+  elements.refineCrease = document.getElementById("refineCrease");
   elements.length2d = document.getElementById("length2d");
   elements.length4d = document.getElementById("length4d");
   elements.ratio = document.getElementById("ratio");
@@ -86,7 +88,9 @@ function initCoinControls() {
 function initProxyControls() {
   elements.creaseOffset.value = "15";
   elements.autoRunProxy.checked = true;
+  elements.refineCrease.checked = true;
   state.autoRunProxy = true;
+  state.refineCrease = true;
   updateProxyOffset();
 }
 
@@ -102,6 +106,7 @@ function bindEvents() {
   elements.clearLandmarksBtn.addEventListener("click", clearLandmarks);
   elements.creaseOffset.addEventListener("input", updateProxyOffset);
   elements.autoRunProxy.addEventListener("change", updateAutoRunProxy);
+  elements.refineCrease.addEventListener("change", updateRefineCrease);
   elements.canvas.addEventListener("click", handleCanvasClick);
 }
 
@@ -200,6 +205,10 @@ function updateProxyOffset() {
 
 function updateAutoRunProxy() {
   state.autoRunProxy = Boolean(elements.autoRunProxy.checked);
+}
+
+function updateRefineCrease() {
+  state.refineCrease = Boolean(elements.refineCrease.checked);
 }
 
 function startManualCoin() {
@@ -361,7 +370,13 @@ async function runProxyLandmarks() {
       setStatus("No hand detected. Try a clearer photo.");
       return;
     }
-    const points = proxyLandmarksFromMediapipe(results);
+    const imageData = state.ctx.getImageData(
+      0,
+      0,
+      elements.canvas.width,
+      elements.canvas.height
+    );
+    const points = proxyLandmarksFromMediapipe(results, imageData);
     if (!points || !areLandmarksValid(points)) {
       setStatus("Proxy landmarks incomplete.");
       return;
@@ -507,7 +522,7 @@ function runMediapipeHands(canvas) {
   });
 }
 
-function proxyLandmarksFromMediapipe(results) {
+function proxyLandmarksFromMediapipe(results, imageData) {
   const landmarks = results.multiHandLandmarks?.[0];
   if (!landmarks || landmarks.length < 21) {
     return null;
@@ -526,8 +541,25 @@ function proxyLandmarksFromMediapipe(results) {
   }
 
   const offset = clamp(state.proxyOffset ?? 0.15, 0, 0.3);
-  const indexBase = interpolate(indexMcp, wrist, offset);
-  const ringBase = interpolate(ringMcp, wrist, offset);
+  let indexBase = interpolate(indexMcp, wrist, offset);
+  let ringBase = interpolate(ringMcp, wrist, offset);
+
+  if (state.refineCrease && imageData) {
+    indexBase = refineCreasePoint(
+      indexBase,
+      indexMcp,
+      indexTip,
+      wrist,
+      imageData
+    );
+    ringBase = refineCreasePoint(
+      ringBase,
+      ringMcp,
+      ringTip,
+      wrist,
+      imageData
+    );
+  }
 
   return {
     indexBase,
@@ -545,6 +577,97 @@ function toPoint(landmark, width, height) {
     x: landmark.x * width,
     y: landmark.y * height,
   };
+}
+
+function refineCreasePoint(base, mcp, tip, wrist, imageData) {
+  const fingerDir = normalizeVector(subtract(tip, mcp));
+  const palmDir = normalizeVector(subtract(wrist, mcp));
+  if (!fingerDir || !palmDir) {
+    return base;
+  }
+
+  const lineLength = Math.hypot(wrist.x - mcp.x, wrist.y - mcp.y);
+  if (lineLength < 1) {
+    return base;
+  }
+
+  const t0 = Math.min(
+    0.35,
+    Math.max(0.02, distance(mcp, base) / lineLength)
+  );
+  const searchRange = 0.08;
+  const step = 0.01;
+  let bestPoint = base;
+  let bestScore = -Infinity;
+
+  for (
+    let t = Math.max(0.02, t0 - searchRange);
+    t <= Math.min(0.35, t0 + searchRange);
+    t += step
+  ) {
+    const candidate = {
+      x: mcp.x + palmDir.x * lineLength * t,
+      y: mcp.y + palmDir.y * lineLength * t,
+    };
+    const score = creaseEdgeScore(candidate, fingerDir, imageData, lineLength);
+    if (score > bestScore) {
+      bestScore = score;
+      bestPoint = candidate;
+    }
+  }
+
+  return bestPoint;
+}
+
+function creaseEdgeScore(point, fingerDir, imageData, lineLength) {
+  const perp = { x: -fingerDir.y, y: fingerDir.x };
+  const base = clamp(lineLength * 0.04, 4, 18);
+  const offsets = [base, base * 1.6, base * 2.2];
+  let score = 0;
+
+  offsets.forEach((offset) => {
+    const a = sampleGray(
+      imageData,
+      point.x + perp.x * offset,
+      point.y + perp.y * offset
+    );
+    const b = sampleGray(
+      imageData,
+      point.x - perp.x * offset,
+      point.y - perp.y * offset
+    );
+    score += Math.abs(a - b);
+  });
+
+  return score;
+}
+
+function sampleGray(imageData, x, y) {
+  const width = imageData.width;
+  const height = imageData.height;
+  const xi = Math.round(clamp(x, 0, width - 1));
+  const yi = Math.round(clamp(y, 0, height - 1));
+  const index = (yi * width + xi) * 4;
+  const data = imageData.data;
+  const r = data[index];
+  const g = data[index + 1];
+  const b = data[index + 2];
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function normalizeVector(vector) {
+  if (!vector) {
+    return null;
+  }
+  const length = Math.hypot(vector.x, vector.y);
+  if (length < 1e-6) {
+    return null;
+  }
+  return { x: vector.x / length, y: vector.y / length };
+}
+
+function subtract(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y };
 }
 
 function interpolate(from, to, t) {
