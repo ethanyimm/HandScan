@@ -45,7 +45,8 @@ const state = {
 };
 
 const elements = {};
-let handposeModelPromise = null;
+let mediapipeHands = null;
+let mediapipeResolver = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   elements.imageInput = document.getElementById("imageInput");
@@ -307,7 +308,8 @@ async function autoDetectLandmarks() {
   try {
     const result = await window.detectFingerLandmarks(elements.canvas);
     if (!result) {
-      setStatus("Model returned no landmarks.");
+      setStatus("Custom model returned no landmarks. Using proxy landmarks.");
+      await runProxyLandmarks();
       return;
     }
     const nextLandmarks = {
@@ -317,7 +319,8 @@ async function autoDetectLandmarks() {
       ringTip: result.ringTip,
     };
     if (!areLandmarksValid(nextLandmarks)) {
-      setStatus("Model landmarks incomplete or invalid.");
+      setStatus("Custom model landmarks invalid. Using proxy landmarks.");
+      await runProxyLandmarks();
       return;
     }
     state.landmarks = {
@@ -328,7 +331,8 @@ async function autoDetectLandmarks() {
     setStatus("Landmarks detected.");
   } catch (error) {
     console.error(error);
-    setStatus("Model inference failed.");
+    setStatus("Custom model failed. Using proxy landmarks.");
+    await runProxyLandmarks();
   }
   renderOverlay();
   updateOutputs();
@@ -339,43 +343,38 @@ async function runProxyLandmarks() {
     setStatus("Upload an image first.");
     return;
   }
-  if (typeof window.handpose === "undefined") {
-    setStatus("Handpose model is unavailable.");
+  if (typeof window.Hands === "undefined") {
+    setStatus("MediaPipe Hands is unavailable.");
     return;
   }
 
   elements.proxyLandmarksBtn.disabled = true;
-  setStatus("Running proxy landmarks (joint-based)...");
+  setStatus("Running proxy landmarks (MediaPipe joints)...");
 
   try {
-    const model = await loadHandposeModel();
-    const predictions = await model.estimateHands(elements.canvas, {
-      flipHorizontal: false,
-    });
-
-    if (!predictions || predictions.length === 0) {
+    const results = await runMediapipeHands(elements.canvas);
+    if (
+      !results ||
+      !results.multiHandLandmarks ||
+      results.multiHandLandmarks.length === 0
+    ) {
       setStatus("No hand detected. Try a clearer photo.");
       return;
     }
-
-    const best = predictions.reduce((current, candidate) => {
-      if (!current) {
-        return candidate;
-      }
-      const currentScore = current.handInViewConfidence ?? 0;
-      const nextScore = candidate.handInViewConfidence ?? 0;
-      return nextScore > currentScore ? candidate : current;
-    }, null);
-
-    const points = proxyLandmarksFromHand(best.landmarks);
+    const points = proxyLandmarksFromMediapipe(results);
     if (!points || !areLandmarksValid(points)) {
       setStatus("Proxy landmarks incomplete.");
       return;
     }
 
+    const confidence = clamp(
+      results.multiHandedness?.[0]?.score ?? 0.6,
+      0,
+      1
+    );
     state.landmarks = {
       ...points,
-      confidence: clamp((best.handInViewConfidence ?? 0.6) * 0.5, 0, 1),
+      confidence: confidence * 0.5,
       source: "proxy",
     };
     setStatus("Proxy landmarks set (approximate).");
@@ -468,22 +467,59 @@ function detectCoin() {
   updateOutputs();
 }
 
-function loadHandposeModel() {
-  if (!handposeModelPromise) {
-    handposeModelPromise = window.handpose.load();
+function loadMediapipeHands() {
+  if (!mediapipeHands) {
+    mediapipeHands = new window.Hands({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+    mediapipeHands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6,
+    });
+    mediapipeHands.onResults((results) => {
+      if (mediapipeResolver) {
+        const resolve = mediapipeResolver;
+        mediapipeResolver = null;
+        resolve(results);
+      }
+    });
   }
-  return handposeModelPromise;
+  return mediapipeHands;
 }
 
-function proxyLandmarksFromHand(landmarks) {
-  if (!Array.isArray(landmarks) || landmarks.length < 21) {
+function runMediapipeHands(canvas) {
+  return new Promise((resolve, reject) => {
+    if (mediapipeResolver) {
+      reject(new Error("MediaPipe inference already running."));
+      return;
+    }
+    const hands = loadMediapipeHands();
+    mediapipeResolver = resolve;
+    hands
+      .send({ image: canvas })
+      .catch((error) => {
+        mediapipeResolver = null;
+        reject(error);
+      });
+  });
+}
+
+function proxyLandmarksFromMediapipe(results) {
+  const landmarks = results.multiHandLandmarks?.[0];
+  if (!landmarks || landmarks.length < 21) {
     return null;
   }
-  const wrist = toPoint(landmarks[0]);
-  const indexMcp = toPoint(landmarks[5]);
-  const indexTip = toPoint(landmarks[8]);
-  const ringMcp = toPoint(landmarks[13]);
-  const ringTip = toPoint(landmarks[16]);
+  const width = elements.canvas.width;
+  const height = elements.canvas.height;
+
+  const wrist = toPoint(landmarks[0], width, height);
+  const indexMcp = toPoint(landmarks[5], width, height);
+  const indexTip = toPoint(landmarks[8], width, height);
+  const ringMcp = toPoint(landmarks[13], width, height);
+  const ringTip = toPoint(landmarks[16], width, height);
 
   if (!wrist || !indexMcp || !indexTip || !ringMcp || !ringTip) {
     return null;
@@ -501,11 +537,14 @@ function proxyLandmarksFromHand(landmarks) {
   };
 }
 
-function toPoint(value) {
-  if (!Array.isArray(value) || value.length < 2) {
+function toPoint(landmark, width, height) {
+  if (!landmark || !Number.isFinite(landmark.x) || !Number.isFinite(landmark.y)) {
     return null;
   }
-  return { x: value[0], y: value[1] };
+  return {
+    x: landmark.x * width,
+    y: landmark.y * height,
+  };
 }
 
 function interpolate(from, to, t) {
