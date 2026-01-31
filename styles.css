@@ -90,6 +90,12 @@ body {
   font-size: 0.95rem;
 }
 
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #5a647a;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
