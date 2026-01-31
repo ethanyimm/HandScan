@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HandScan Dataset Labeler</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <h1>HandScan Dataset Labeler</h1>
+        <p>
+          Create training data by marking the base creases and tips for the
+          index and ring fingers. Export annotations as JSON for model training.
+        </p>
+      </div>
+    </header>
+
+    <main class="layout layout-single">
+      <section class="panel">
+        <div class="controls">
+          <label class="file-input">
+            <span>Upload training images</span>
+            <input type="file" id="imageInput" accept="image/*" multiple />
+          </label>
+
+          <div class="control-row">
+            <label>
+              Current image
+              <select id="imageSelect"></select>
+            </label>
+            <label>
+              Progress
+              <input id="progressSummary" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="startLabelingBtn">Start labeling</button>
+            <button id="clearPointsBtn">Clear points</button>
+            <button id="saveAnnotationBtn">Save annotation</button>
+            <button id="downloadBtn">Download JSON</button>
+          </div>
+
+          <div class="button-row">
+            <button id="prevBtn">Prev image</button>
+            <button id="nextBtn">Next image</button>
+          </div>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="labelCanvas" aria-label="Labeling canvas"></canvas>
+          <div class="canvas-overlay" id="canvasHint">
+            Upload images to begin labeling.
+          </div>
+        </div>
+
+        <p class="status" id="status">Waiting for images.</p>
+      </section>
+
+      <section class="panel results">
+        <h2>Landmark order</h2>
+        <ol class="landmark-list">
+          <li>Index base (Jupiter crease)</li>
+          <li>Index tip</li>
+          <li>Ring base (Apollo crease)</li>
+          <li>Ring tip</li>
+        </ol>
+        <div class="notes">
+          <p>
+            Use consistent lighting and keep the hand flat and relaxed. The more
+            variation you label (skin tones, hand sizes, camera angles), the
+            better the model will generalize.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p><a class="link" href="index.html">Back to measurement app</a></p>
+    </footer>
+
+    <script src="labeler.js"></script>
+  </body>
+</html>
