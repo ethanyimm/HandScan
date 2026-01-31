@@ -46,11 +46,11 @@
 
           <div class="control-row">
             <label>
-              Crease offset toward wrist (%)
+              Crease offset (% from MCP)
               <input
                 id="creaseOffset"
                 type="number"
-                min="0"
+                min="-30"
                 max="45"
                 step="1"
               />
@@ -59,14 +59,10 @@
               <input id="autoRunProxy" type="checkbox" checked />
               Auto-run proxy landmarks on upload
             </label>
-            <label class="checkbox">
-              <input id="refineCrease" type="checkbox" checked />
-              Refine crease using edges
-            </label>
           </div>
           <p class="hint">
-            Proxy mode uses MCP joints and offsets toward the wrist. Increase if
-            the base crease lands too close to the knuckle.
+            Proxy mode uses MCP joints. Negative offsets move toward the
+            fingertip (higher), positive offsets move toward the wrist (lower).
           </p>
 
           <div class="button-row">
